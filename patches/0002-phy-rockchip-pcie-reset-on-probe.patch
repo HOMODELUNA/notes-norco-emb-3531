@@ -1,0 +1,48 @@
+From: EMB-3531 项目组
+Subject: [PATCH 2/2] phy: rockchip-pcie: probe 时复位 PHY
+
+本补丁移植自 Armbian build PR 6057。
+
+新增 rockchip_pcie_phy_reset()：把 4 条 lane 置为 idle-off 状态，
+再断言并解断言 PHY 复位。probe 中首次 power_on 之前调用该函数，
+用于清理上次运行遗留的 PHY 状态。
+
+实测结果：EMB-3531 上该补丁无效，链路仍停在 Detect.Active。
+
+适用范围：linux-6.18.24。
+---
+--- a/drivers/phy/rockchip/phy-rockchip-pcie.c
++++ b/drivers/phy/rockchip/phy-rockchip-pcie.c
+@@ -262,6 +262,23 @@
+ 
+ MODULE_DEVICE_TABLE(of, rockchip_pcie_phy_dt_ids);
+ 
++/*
++ * 复位 PHY 到“工厂”状态。
++ * 原因：热重启后 PHY 保持上一次的状态，会阻止链路训练。
++ * 参考 Armbian build PR 6057（rk3399 PCIE PHY reset on probe）。
++ */
++static void rockchip_pcie_phy_reset(struct rockchip_pcie_phy *rk_phy)
++{
++	int i;
++
++	for (i = 0; i < PHY_MAX_LANE_NUM; i++)
++		regmap_write(rk_phy->reg_base, rk_phy->phy_data->pcie_laneoff,
++			     FIELD_PREP_WM16(PHY_LANE_IDLE_MASK,
++					     PHY_LANE_IDLE_OFF) << i);
++
++	reset_control_assert(rk_phy->phy_rst);
++}
++
+ static int rockchip_pcie_phy_probe(struct platform_device *pdev)
+ {
+ 	struct device *dev = &pdev->dev;
+@@ -306,6 +323,8 @@
+ 	phy_num = (phy_num == 0) ? 1 : PHY_MAX_LANE_NUM;
+ 	dev_dbg(dev, "phy number is %d\n", phy_num);
+ 
++	rockchip_pcie_phy_reset(rk_phy);
++
+ 	for (i = 0; i < phy_num; i++) {
+ 		rk_phy->phys[i].phy = devm_phy_create(dev, dev->of_node, &ops);
+ 		if (IS_ERR(rk_phy->phys[i].phy)) {
