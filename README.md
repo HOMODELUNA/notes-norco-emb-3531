@@ -8,11 +8,26 @@
 | --- | --- | --- |
 | 自编内核 | 成功 | 版本 `6.18.24-emb3531`，134 个模块 |
 | 无线网卡驱动 | 成功 | `rtl8xxxu`，芯片 RTL8188EUS |
-| 无线自动联网 | 成功 | 连接 `535-local`，`wlan0` 地址 `192.168.0.157` |
+| 无线自动联网 | 成功 | 装天线后稳定连接 `Xia***915`，信号 -59 dBm |
 | PCIe 转 SATA | 失败 | 链路状态机停在 Detect.Active |
 | 串口调试 | 失败 | 疑 RS232 电平，需要 USB 转 RS232 线 |
 
 WiFi 全部功能可用。PCIe 在软件层已排除全部可调项，剩余疑点在供电。
+
+## 最新进度（2026-11-25）
+
+装上 `ANT1` 天线后重新测试无线，结果记录在 [wifi-config.md](wifi-config.md)。
+
+| 项目 | 结果 |
+| --- | --- |
+| 天线 | 已安装 2.4 GHz 天线 |
+| 关联 SSID | `Xia***915`，BSSID `f0:0c:51:28:ce:0a` |
+| 信号 | -59 dBm（平均 -57 dBm），信道 9，20 MHz |
+| 链路质量 | 发送重传 0 次，发送失败 0 次，信标丢失 0 个 |
+| 地址 | `192.168.1.8/24`，DHCP，metric 600 |
+| 待处理 | 监管数据库无效（`country 00`），用户不在 `netdev` 组 |
+
+此前未装天线时 `Xia***915` 只有 -91 dBm 且四次握手超时，现已在 -59 dBm 稳定关联。
 
 ## 硬件
 
@@ -22,7 +37,7 @@ WiFi 全部功能可用。PCIe 在软件层已排除全部可调项，剩余疑�
 | 系统盘 | eMMC，容量 14.7 GiB |
 | 电源 | DC 12 V，2 A，圆口输入 |
 | 无线芯片 | RTL8188EUS，USB `0bda:8179`，1T1R 2.4 GHz |
-| 无线天线 | 接口 `ANT1`，当前未插 |
+| 无线天线 | 接口 `ANT1`，已安装 2.4 GHz 天线 |
 | 扩展卡 | PCIe 转 SATA，型号 `SU-SA3234A` |
 | 调试口 | DB9，物理层疑为 RS232 |
 
@@ -88,6 +103,7 @@ test-img/
 ├── README.md                 本文件
 ├── overview.md               A/B 两个原厂镜像的对比
 ├── 1122-status.md            系统状态、编译环境、无线联网
+├── wifi-config.md            装天线后的 wlan0 复测记录（最新进度）
 ├── 1122-pcie.md              PCIe 全部测试与读数
 ├── 1121-status-1.md          早期阶段记录
 ├── 1122-plan.md              早期计划
@@ -107,7 +123,7 @@ test-img/
 
 | 分组 | 内容 |
 | --- | --- |
-| 文档 | 5 个 Markdown 文件，见下节 |
+| 文档 | 6 个 Markdown 文件，见下节 |
 | 内核补丁 | `patches/` 两个补丁，另加 SDK 内 3 处改动 |
 | 镜像构建 | `make-image-v3.sh`，根目录唯一构建入口 |
 | 内核编译 | `host-build-kernel.sh` |
@@ -120,6 +136,7 @@ test-img/
 
 | 文档 | 内容 |
 | --- | --- |
+| [wifi-config.md](wifi-config.md) | 2026-11-25 装天线后的 wlan0 复测：关联状态、链路质量、网络管理现状、后续路线 |
 | [1122-status.md](1122-status.md) | 当前状态、编译环境、启动标签、无线驱动与联网、已解决的问题 |
 | [1122-pcie.md](1122-pcie.md) | PCIe 硬件、测试记录、寄存器读数、对照资料、补丁存盘 |
 | [patches/README.md](patches/README.md) | 两个内核补丁的来源、应用方法、校验值 |
@@ -138,7 +155,8 @@ test-img/
 | 无线服务 | `wifi-power.service`，常驻持有 `gpiochip4` 第 28 线 |
 | 无线联网 | `wpa_supplicant@wlan0` 加 `systemd-networkd` |
 | 有线地址 | `192.168.0.126`，metric 100 |
-| 无线地址 | `192.168.0.157`，metric 600 |
+| 无线地址 | `192.168.1.8`，metric 600（2026-11-25 复测网段 `192.168.1.0/24`） |
+| 无线信号 | `Xia***915`，-59 dBm，信道 9，详见 [wifi-config.md](wifi-config.md) |
 
 ## 常用操作
 
@@ -146,8 +164,10 @@ test-img/
 | --- | --- |
 | 登录板子 | `ssh emb` |
 | 查看接口状态 | `networkctl status` |
-| 查看无线连接 | `wpa_cli -i wlan0 status` |
-| 扫描无线信号 | `iw dev wlan0 scan \| grep SSID` |
+| 查看关联与信号 | `/sbin/iw dev wlan0 link` |
+| 查看链路统计 | `/sbin/iw dev wlan0 station dump` |
+| 查看无线连接 | `wpa_cli -i wlan0 status`（需 `netdev` 组权限） |
+| 扫描无线信号 | `/sbin/iw dev wlan0 scan \| grep SSID` |
 | 测试 PCIe | `/root/pcie-test3.sh` |
 | 查看开机耗时 | `systemd-analyze` |
 | 清理中间产物 | `scripts/cleanup-intermediate.sh` |
@@ -157,7 +177,9 @@ test-img/
 1. 手头没有万用表，无法测量槽内 12 V、3.3 V、3.3 Vaux。
 2. 手头没有 NVMe 设备，无法在本板做对照。
 3. 串口始终不可读，看不到 U-Boot 与内核早期日志。
-4. 天线未插，`Xiangshu915` 信号为 -91 dBm，4 次握手超时。
+4. 监管数据库无效，`iw reg get` 显示 `country 00`，发射功率上限 20 dBm，5 GHz 部分信道只能被动扫描。
+5. 用户 `homodeluna` 不在 `netdev` 组，`wpa_cli` 无法连接控制套接字。
+6. `/sbin` 不在登录用户的 `PATH` 里，`iw` 与 `wpa_cli` 需写全路径。
 
 ## 警告
 
@@ -167,7 +189,7 @@ test-img/
 
 警告：禁止用 `devmem` 读 `0xfd000000` 区域。控制器时钟关闭时该操作会挂死总线。
 
-警告：未接天线时禁止让无线网卡长期发射。驻波比过高会损伤功放。
+警告：拆下 `ANT1` 天线时禁止让无线网卡长期发射。驻波比过高会损伤功放。
 
 警告：日常使用建议把默认标签改回 `l2`。
 
